@@ -94,6 +94,7 @@ class AdminPrivileges(Resource):
             response_dict=each_privilege.to_dict()
             response_list.append(response_dict)
             
+            
         response=make_response(jsonify(response_list),200)
         return response
     
