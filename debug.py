@@ -9,3 +9,5 @@ with app.app_context():
     # db.session.commit()
     # for each in all_admins.admin_privileges:
     #     print(each.privilege)
+    
+   

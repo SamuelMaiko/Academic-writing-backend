@@ -36,12 +36,10 @@ class User(db.Model):
         return value
     
     
-class Admin(db.Model, SerializerMixin):
+class Admin(db.Model):
     
     __tablename__='admins'
     
-    # serialize_rules=('-created_writer_accounts.account_creator',)
-    # serialize_rules=('-_privileges.admin','-created_writer_accounts.account_creator','-created_assignments.assignment_author',)
     
     id=db.Column(db.Integer, primary_key=True)
     work_id=db.Column(db.String(255), unique=True )
@@ -95,16 +93,16 @@ class Admin(db.Model, SerializerMixin):
             "email":self.email ,
             "control_status":self.control_status ,
             "created_writer_accounts":[each.to_dict() for each in self.created_writer_accounts] ,
-            # "lastname":self.lastname ,
+            "created_assignments": [each.to_dict() for each in self.created_assignments] ,
+            "admin_privileges":[each.to_dict() for each in self.admin_privileges] ,
         }
         return model_return
     
 
-class PrivilegeConnector(db.Model,SerializerMixin):
+class PrivilegeConnector(db.Model):
     
     __tablename__='privilegeconnector'
     
-    # serialize_rules=('-admin._privileges','-adm_privilege._privileges',)
     
     id=db.Column(db.Integer, primary_key=True)
      
@@ -112,11 +110,10 @@ class PrivilegeConnector(db.Model,SerializerMixin):
     adm_privilege_id=db.Column(db.Integer, db.ForeignKey('admin_privileges.id'))
     
     
-class AdminPrivilege(db.Model, SerializerMixin):
+class AdminPrivilege(db.Model):
     
     __tablename__='admin_privileges'
     
-    serialize_rules=('-_privileges.adm_privilege',)
     
     id=db.Column(db.Integer, primary_key=True)
     privilege=db.Column(db.String(255), nullable=False )
@@ -128,22 +125,31 @@ class AdminPrivilege(db.Model, SerializerMixin):
         creator=lambda adm: PrivilegeConnector(admin=adm)
         )
     
-    # def to_dict(self):
-    #     model_return={
-    #         "work_id":self.work_id ,
-    #         "username":self.username ,
-    #         "firstname":self.firstname ,
-    #         "lastname":self.lastname ,
-    #     }
-    #     return model_return
+    def to_dict(self):
+        model_return={
+            "id":self.id ,
+            "privilege":self.privilege ,
+            "description":self.description ,
+            "admins":[
+                {
+            "id":each.id ,
+            "work_id":each.work_id ,
+            "username":each.username ,
+            "firstname":each.firstname ,
+            "lastname":each.lastname ,
+            "email":each.email ,
+            "control_status":each.control_status,
+        }
+        for each in self.admins] ,
+            
+        }
+        return model_return
     
     
-class Writer(db.Model, SerializerMixin):
+class Writer(db.Model):
     
     __tablename__='writers'
     
-    # serialize_rules=('-account_creator.created_writer_accounts',)
-    # serialize_rules=('-assigned_assignments.assigned_writer','-account_creator.created_writer_accounts',)
     
     id=db.Column(db.Integer, primary_key=True)
     work_id=db.Column(db.String(255), unique=True )
@@ -191,17 +197,16 @@ class Writer(db.Model, SerializerMixin):
             "lastname":self.lastname ,
             "email":self.email ,
             "account_status":self.account_status ,
-            "assigned_assignments":["Writer!" for each in self.assigned_assignments] ,
+            "assigned_assignments":[each.to_dict() for each in self.assigned_assignments] ,
             # "lastname":self.lastname ,
         }
         return model_return
     
     
-class Assignment(db.Model,SerializerMixin):
+class Assignment(db.Model):
     
     __tablename__='assignments'
     
-    # serialize_rules=('-assignment_author.created_assignments','-assigned_writer.assigned_assignments',)
     
     id=db.Column(db.Integer, primary_key=True)
     assignment_id=db.Column(db.String(255), nullable=False)
@@ -235,11 +240,17 @@ class Assignment(db.Model,SerializerMixin):
         
         return value
     
-    # def to_dict(self):
-    #     model_return={
-    #         "work_id":self.work_id ,
-    #         "username":self.username ,
-    #         "firstname":self.firstname ,
-    #         "lastname":self.lastname ,
-    #     }
-    #     return model_return
+    def to_dict(self):
+        model_return={
+            "id":self.id ,
+            "assignment_id":self.assignment_id ,
+            "title":self.title ,
+            "additional_info":self.additional_info ,
+            "word_count":self.word_count ,
+            "deadline":self.deadline ,
+            "personnel_status":self.personnel_status ,
+            "assignment_status":self.assignment_status ,
+            "file_url":self.file_url ,
+            
+        }
+        return model_return
