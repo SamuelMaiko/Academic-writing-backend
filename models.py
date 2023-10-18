@@ -1,7 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import validates
-from sqlalchemy_serializer import SerializerMixin
+# from sqlalchemy_serializer import SerializerMixin
 import re
 
 db=SQLAlchemy()
@@ -129,13 +129,17 @@ class Assignment(db.Model):
             "deadline":self.deadline ,
             "personnel_status":self.personnel_status ,
             "assignment_status":self.assignment_status ,
-            "assigned_writer":dict(id=self.assigned_writer.id,username=self.assigned_writer.username,
-                                   firstname=self.assigned_writer.firstname, lastname=self.assigned_writer.lastname,
-                                   role=self.assigned_writer.role, email=self.assigned_writer.email
-                                   ),
             "file_url":self.file_url ,
             
         }
+        if  self.assigned_writer:
+            model_return["assigned_writer"]=dict(id=self.assigned_writer.id,username=self.assigned_writer.username,
+                                   firstname=self.assigned_writer.firstname, lastname=self.assigned_writer.lastname,
+                                   role=self.assigned_writer.role, email=self.assigned_writer.email
+                                   )
+            
+        else:
+            model_return["assigned_writer"]=None
         return model_return
 
 
