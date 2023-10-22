@@ -16,6 +16,7 @@ class User(db.Model):
     username=db.Column(db.String(255), nullable=False, unique=True )
     firstname=db.Column(db.String(255), nullable=False )
     lastname=db.Column(db.String(255), nullable=False )
+    phone_number=db.Column(db.String(255), nullable=False)
     email=db.Column(db.String(255), nullable=False, unique=True)
     password=db.Column(db.String(255), nullable=False )
     role=db.Column(db.Enum('Main Admin', 'Admin','Writer'), nullable=False )
@@ -24,13 +25,14 @@ class User(db.Model):
     created_at=db.Column(db.DateTime, server_default=db.func.now() )
     updated_at=db.Column(db.DateTime, onupdate=db.func.now() )
     
-
+    user_profile=db.relationship("UserProfile", uselist=False, backref="user")
     
     _privileges=db.relationship('PrivilegeConnector', backref='user')
     admin_privileges=association_proxy(
         '_privileges','adm_privilege',
         creator=lambda pr:PrivilegeConnector(adm_privilege=pr)
         )
+    
     
     
     @validates('password')
@@ -60,6 +62,11 @@ class User(db.Model):
             raise ValueError("Only values accepted: 'Active', 'Deactivated'")
         
         return value
+    @validates('phone_number')
+    def validate_phone_number(self,key,value):
+        if len(value)!=13:
+            raise ValueError("Phone number should be 13 characters long")
+        return value
     
     def to_dict(self):
         model_return={
@@ -75,10 +82,37 @@ class User(db.Model):
             "admin_privileges":[dict(id=each.id,privilege=each.privilege, description=each.description) for each in self.admin_privileges] ,
             "assigned_assignments":[each.to_dict() for each in self.assigned_assignments] ,
         }
+        if self.user_profile:
+            model_return["user_profile"]=self.user_profile.to_dict()
+        # else:
+        #     model_return["user_profile"]=dict(username=self.username, bio="I am a new user!", profile_url="https://www.shutterstock.com/image-vector/default-avatar-profile-icon-vector-260nw-1725655669.jpg")
         return model_return
     
 
-
+class UserProfile(db.Model):
+    
+    __tablename__='userprofiles'
+    
+    id=db.Column(db.Integer, primary_key=True)
+    username=db.Column(db.String(255), nullable=True )
+    bio=db.Column(db.String(255), nullable=True )
+    profile_url=db.Column(db.String(255), nullable=True )
+    
+    user_id=db.Column(db.Integer, db.ForeignKey('users.id'))
+    
+    created_at=db.Column(db.DateTime, server_default=db.func.now() )
+    updated_at=db.Column(db.DateTime, onupdate=db.func.now() )
+    
+    def to_dict(self):
+        model_return={
+            "id":self.id,
+            "username":self.username,
+            "bio":self.bio,
+            "profile_url":self.profile_url,
+            "user":dict(id=self.user.id,username=self.user.username,work_id=self.user.work_id, firstname=self.user.firstname,
+                        lastname=self.user.lastname,email=self.user.email, role=self.user.role)
+        }
+        return model_return
 class Assignment(db.Model):
     
     __tablename__='assignments'
@@ -133,7 +167,7 @@ class Assignment(db.Model):
             
         }
         if  self.assigned_writer:
-            model_return["assigned_writer"]=dict(id=self.assigned_writer.id,username=self.assigned_writer.username,
+            model_return["assigned_writer"]=dict(id=self.assigned_writer.id,work_id=self.assigned_writer.work_id,username=self.assigned_writer.username,
                                    firstname=self.assigned_writer.firstname, lastname=self.assigned_writer.lastname,
                                    role=self.assigned_writer.role, email=self.assigned_writer.email
                                    )
@@ -176,17 +210,17 @@ class AdminPrivilege(db.Model):
             "id":self.id ,
             "privilege":self.privilege ,
             "description":self.description ,
-            "users":[
-                {
-            "id":each.id ,
-            "work_id":each.work_id ,
-            "username":each.username ,
-            "firstname":each.firstname ,
-            "lastname":each.lastname ,
-            "email":each.email ,
-            "role":each.role,
-        }
-        for each in self.users] ,
+        #     "users":[
+        #         {
+        #     "id":each.id ,
+        #     "work_id":each.work_id ,
+        #     "username":each.username ,
+        #     "firstname":each.firstname ,
+        #     "lastname":each.lastname ,
+        #     "email":each.email ,
+        #     "role":each.role,
+        # }
+        # for each in self.users if self.users] ,
             
         }
         return model_return

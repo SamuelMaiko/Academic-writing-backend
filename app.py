@@ -1,6 +1,6 @@
 from flask import Flask,make_response, jsonify,request
 from flask_migrate import Migrate
-from models import db, User, AdminPrivilege, Assignment,PrivilegeConnector
+from models import db, User, UserProfile, AdminPrivilege, Assignment,PrivilegeConnector
 from flask_restful import Api, Resource
 from flask_jwt_extended import JWTManager,create_access_token
 from flask_cors import CORS
@@ -22,7 +22,7 @@ db.init_app(app)
 api=Api(app)
 
 
-#/////login and register api
+#/////login api____________________________________________________
 
 
 class Login(Resource):
@@ -56,11 +56,91 @@ class Login(Resource):
     
 api.add_resource(Login,'/login')
 
+# users ____________________________________________________
+class Users(Resource):
+    def get(self):
+        all_users=User.query.all()
+        response_list=list()
+        for each_user in all_users:
+            response_dict=each_user.to_dict()
+            response_list.append(response_dict)
+        
+        response=make_response(jsonify(response_list),200)
+        return response
+    def post(self):
+        new_user=User(work_id=request.json.get("work_id"),username=f"NewUser{request.json.get('email')}",
+                        firstname=request.json.get("firstname"),lastname=request.json.get("lastname"),
+                        email=request.json.get("email"),phone_number=request.json.get("phone_number"),role=request.json.get("role"),password=request.json.get("password"),
+                        account_status="Active"
+                        )
+        new_profile=UserProfile(username=new_user.username, bio="I am a new user!", profile_url="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png")
+        db.session.add(new_user)
+        new_user.user_profile=new_profile
+        db.session.commit()
+        response_dict=new_user.to_dict()
+        response=make_response(jsonify(response_dict),200)
+        return response
+api.add_resource(Users,'/users')
 
 
+# users by id ____________________________________________________
 
+class UsersByID(Resource):
+    def get(self,id):
+        specific_user=User.query.filter(User.work_id==id).first()
+        
+        if specific_user:
+            response_dict=specific_user.to_dict()
+            status_code=200
+        else:
+            response_dict=dict(message="User not found")
+            status_code=404
+        response=make_response(jsonify(response_dict),status_code)
+        return response
+    def delete(self,id):
+        specific_user=User.query.filter(User.work_id==id)
+        specific_user2=User.query.filter(User.work_id==id).first()
+        if specific_user:
+            user_id = specific_user2.id
+            specific_user.delete()
+            
+            privilege_connectors=PrivilegeConnector.query.filter(PrivilegeConnector.user_id==user_id).all()
+            for each in privilege_connectors:
+                db.session.delete(each)
+                # each.delete()
+            user_profiles=UserProfile.query.filter(UserProfile.user_id==user_id).all()
+            for each in user_profiles:
+                db.session.delete(each)
+            
+            db.session.commit()
+            
+            response_dict=dict(message="deleted successfully")
+            response=make_response(jsonify(response_dict),200)
+        else:
+            response_dict=dict(error="Admin not found")
+            response=make_response(jsonify(response_dict),404)
+            
+        return response
+    
+    def patch(self,id):
+        specific_user=User.query.filter(User.work_id==id).first()
+        
+        if specific_user:
+            for attr in request.json:
+                setattr(specific_user,attr,request.json.get(attr))
+            db.session.commit()
+            response_dict=specific_user.to_dict()
+            response=make_response(jsonify(response_dict),200)
+        else:
+            response_dict=dict(error="Admin not found")
+            response=make_response(jsonify(response_dict),404)
+            
+        # return f"{request.json.get('phone_number')}"
+        return response
+api.add_resource(UsersByID,'/users/<string:id>')
+        
 
-# //////admins api
+# //////admins api____________________________________________________
 class Admins(Resource):
     def get(self):
         all_admins=User.query.filter(db.or_(User.role == 'Admin', User.role == 'Main Admin')).all()
@@ -88,7 +168,7 @@ api.add_resource(Admins,'/admins')
 
 
 
-# ////////admins by id api
+# ////////admins by id api__________________________________________
 class AdminsById(Resource):
     
     def get(self,work_id):
@@ -107,6 +187,9 @@ class AdminsById(Resource):
         specific_admin=User.query.filter(db.and_(User.work_id==work_id,db.or_( User.role=="Main Admin",User.role=="Admin")))
         if specific_admin:
             specific_admin.delete()
+            privilege_connectors=PrivilegeConnector.query.filter(PrivilegeConnector.user_id==work_id).all()
+            for each in privilege_connectors:
+                each.delete()
             db.session.commit()
             
             response_dict=dict(message="deleted successfully")
@@ -137,7 +220,7 @@ api.add_resource(AdminsById,'/admins/<string:work_id>')
 
 
 
-# ///////Admin privileges api 
+# ///////Admin privileges api__________________________________________ 
 class AdminPrivileges(Resource):
     def get(self):
         all_admin_privileges=AdminPrivilege.query.all()
@@ -163,7 +246,7 @@ class AdminPrivileges(Resource):
 api.add_resource(AdminPrivileges,'/admin_privileges')
 
 
-
+# admin privileges ____________________________________________________
 class AdminPrivilegesById(Resource):
     def get(self,id):
         specific_admin_privilege=AdminPrivilege.query.filter(AdminPrivilege.id==id).first()
@@ -211,8 +294,92 @@ class AdminPrivilegesById(Resource):
 api.add_resource(AdminPrivilegesById,'/admin_privileges/<int:id>')
 
 
+# admin privileges ____________________________________________________
+class AdminPrivilegeByUserId(Resource):
+    def get(self, work_id):
+        specific_user=User.query.filter(User.work_id==work_id).first()
+        if specific_user:
+            response_list=list()
+            for each_privilege in specific_user.admin_privileges:
+                response_dict=dict(id=each_privilege.id,privilege=each_privilege.privilege,description=each_privilege.description)
+                response_list.append(response_dict)
+            response=make_response(jsonify(response_list),200)
+        else:
+            response_dict=dict(error="User not found")
+            response=make_response(jsonify(response_dict),404)
+        
+        return response
+    
+    def patch(self, work_id):
+        privilege1=request.json.get("privilege1")
+        privilege2=request.json.get("privilege2")
+        privilege3=request.json.get("privilege3")
+        privilege4=request.json.get("privilege4")
+        privilege5=request.json.get("privilege5")
+        specific_user=User.query.filter(User.work_id==work_id).first()
+        
+        if privilege1==True:
+            admin_privilegeOne=AdminPrivilege.query.filter(AdminPrivilege.id==1).first()
+            if admin_privilegeOne not in specific_user.admin_privileges:
+                specific_user.admin_privileges.append(admin_privilegeOne)
+                db.session.commit()
+        if privilege2==True:
+            admin_privilegeTwo=AdminPrivilege.query.filter(AdminPrivilege.id==2).first()
+            if admin_privilegeTwo not in specific_user.admin_privileges:
+                specific_user.admin_privileges.append(admin_privilegeTwo)
+                db.session.commit()
+        if privilege3==True:
+            admin_privilegeThree=AdminPrivilege.query.filter(AdminPrivilege.id==3).first()
+            if admin_privilegeThree not in specific_user.admin_privileges:
+                specific_user.admin_privileges.append(admin_privilegeThree)
+                db.session.commit()
+        if privilege4==True:
+            admin_privilegeFour=AdminPrivilege.query.filter(AdminPrivilege.id==4).first()
+            if admin_privilegeFour not in specific_user.admin_privileges:
+                specific_user.admin_privileges.append(admin_privilegeFour)
+                db.session.commit()
+        if privilege5==True:
+            admin_privilegeFive=AdminPrivilege.query.filter(AdminPrivilege.id==5).first()
+            if admin_privilegeFive not in specific_user.admin_privileges:
+                specific_user.admin_privileges.append(admin_privilegeFive)
+                db.session.commit()
+            
+        if privilege1==False:
+            # admin_privilegeOne=AdminPrivilege.query.filter(AdminPrivilege.id==1).first()
+            # for each_privilege in specific_user.admin_privileges:
+                # if each_privilege.id==1:
+            privilege_to_delete=PrivilegeConnector.query.filter(db.and_(PrivilegeConnector.adm_privilege_id==1,PrivilegeConnector.user_id==specific_user.id)).first()
+            if privilege_to_delete:
+                db.session.delete(privilege_to_delete)                
+                db.session.commit()
+        if privilege2==False:
+            privilege_to_delete=PrivilegeConnector.query.filter(db.and_(PrivilegeConnector.adm_privilege_id==2,PrivilegeConnector.user_id==specific_user.id)).first()
+            if privilege_to_delete:
+                db.session.delete(privilege_to_delete)                
+                db.session.commit()
+        if privilege3==False:
+            privilege_to_delete=PrivilegeConnector.query.filter(db.and_(PrivilegeConnector.adm_privilege_id==3,PrivilegeConnector.user_id==specific_user.id)).first()
+            if privilege_to_delete:
+                db.session.delete(privilege_to_delete)                
+                db.session.commit()
+        if privilege4==False:
+            privilege_to_delete=PrivilegeConnector.query.filter(db.and_(PrivilegeConnector.adm_privilege_id==4,PrivilegeConnector.user_id==specific_user.id)).first()
+            if privilege_to_delete:
+                db.session.delete(privilege_to_delete)                
+                db.session.commit()
+        if privilege5==False:
+            privilege_to_delete=PrivilegeConnector.query.filter(db.and_(PrivilegeConnector.adm_privilege_id==5,PrivilegeConnector.user_id==specific_user.id)).first()
+            if privilege_to_delete:
+                db.session.delete(privilege_to_delete)                
+                db.session.commit()
+        # else:
+        response=make_response("",200)
+        return response
+        
+    
 
-# # ///////Writers api
+api.add_resource(AdminPrivilegeByUserId,'/privilege_by_user_id/<string:work_id>')
+# # ///////Writers api________________________________________________
 class Writers(Resource):
     def get(self):
         all_writers=User.query.filter(User.role=="Writer").all()
@@ -239,7 +406,7 @@ class Writers(Resource):
 api.add_resource(Writers,'/writers')
 
 
-# //////writers by id api
+# //////writers by id api___________________________________________
 class WritersById(Resource):
     
     def get(self,work_id):
@@ -286,7 +453,7 @@ class WritersById(Resource):
     
 api.add_resource(WritersById,'/writers/<string:work_id>')
 
-
+# assignments ____________________________________________________
 class Assignments(Resource):
     def get (self):
         all_assignments=Assignment.query.all()
@@ -328,6 +495,7 @@ class Assignments(Resource):
     
 api.add_resource(Assignments,'/assignments')
 
+# unassigned assignments ____________________________________________________
 class UnassignedAssignments(Resource):
     def get (self):
         unassigned_assignments=Assignment.query.filter(Assignment.personnel_status=="Unassigned").all()
@@ -342,6 +510,7 @@ class UnassignedAssignments(Resource):
     
 api.add_resource(UnassignedAssignments,'/unassigned_assignments')
 
+# assigned assignments ____________________________________________________
 class AssignedAssignments(Resource):
     def get (self):
         assigned_assignments=Assignment.query.filter(Assignment.personnel_status=="Assigned").all()
@@ -367,9 +536,66 @@ class AllAssignmentIds(Resource):
     
 api.add_resource(AllAssignmentIds,'/all_assignment_ids')
         
+#  userprofiles by id ____________________________________________________
+class UserProfilesById(Resource):
+     def get(self,id):
+        specific_user=User.query.filter(User.work_id==id).first()
+        
+        if specific_user:
+            response_dict=dict(id=specific_user.user_profile.id, bio=specific_user.user_profile.bio,
+                               profile_url=specific_user.user_profile.profile_url,username=specific_user.user_profile.username
+                               )
+            status_code=200
+        else:
+            response_dict=dict(message="Profile not found")
+            status_code=404
             
+        response=make_response(jsonify(response_dict),200)
+        return response
 
+api.add_resource(UserProfilesById,'/user_profiles/<string:id>')
+        
+                
+# deactivate user account  ____________________________________________________
+
+class UserDeactivation(Resource):
+    def patch(self,work_id):
+        specific_user=User.query.filter(User.work_id==work_id).first()
+        
+        if specific_user:
+            setattr(specific_user,"account_status","Deactivated")
+            db.session.commit()
+            response_dict=""
+            status_code=204
+        else:
+            response_dict=dict(error="User not found")
+            status_code=404
+            
+        response=make_response(jsonify(response_dict),status_code)
+        return response
+    
+api.add_resource(UserDeactivation,'/deactivate_user/<string:work_id>')
+# activate user account  ____________________________________________________
+
+class UserActivation(Resource):
+    def patch(self,work_id):
+        specific_user=User.query.filter(User.work_id==work_id).first()
+        
+        if specific_user:
+            setattr(specific_user,"account_status","Active")
+            db.session.commit()
+            response_dict=dict(message="User activated",work_id=specific_user.work_id)
+            status_code=200
+        else:
+            response_dict=dict(error="User not found")
+            status_code=404
+            
+        response=make_response(jsonify(response_dict),status_code)
+        return response
+
+api.add_resource(UserActivation,'/activate_user/<string:work_id>')
 
 
 if __name__ =='__main__':
-    app.run(debug=True, port=5555)
+    with app.app_context():
+        app.run(debug=True, port=5555)
